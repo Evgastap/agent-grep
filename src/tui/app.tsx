@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, render, Text, useInput, useWindowSize } from "ink";
-import { collectLogFiles, getConfigRoot } from "../paths.ts";
-import type { LogEntry, Role } from "../parse.ts";
+import { collectLogFiles } from "../paths.ts";
+import type { LogEntry, Role, Source } from "../parse.ts";
 import { compileRegex, parseDateOrNull, type Filters } from "../filters.ts";
 import { runSearch } from "./engine.ts";
 
@@ -14,8 +14,11 @@ export interface TuiOptions {
   fixed: boolean;
   initialProject?: string;
   initialRole?: Role;
+  initialSource?: Source | null;
   since?: string;
   until?: string;
+  claudeCode: boolean;
+  codex: boolean;
   includeCorrupted: boolean;
   includeSubagents: boolean;
   includeHistory: boolean;
@@ -25,10 +28,12 @@ export interface TuiOptions {
 export interface LaunchIntent {
   project: string;
   sessionId: string | null;
+  source: Source;
   dangerously: boolean;
 }
 
 const ROLE_CYCLE: (Role | null)[] = [null, "user", "assistant", "tool"];
+const SOURCE_CYCLE: (Source | null)[] = [null, "claude-code", "codex"];
 
 export async function runTui(opts: TuiOptions): Promise<LaunchIntent | null> {
   return new Promise((resolve) => {
@@ -71,6 +76,9 @@ function App({ opts, onSelect, onQuit }: AppProps) {
   const [truncated, setTruncated] = useState(false);
 
   const [role, setRole] = useState<Role | null>(opts.initialRole ?? null);
+  const [sourceFilter, setSourceFilter] = useState<Source | null>(
+    opts.initialSource ?? null,
+  );
   const projectText = opts.initialProject ?? null;
   const [cwdOnly, setCwdOnly] = useState(false);
   const [dangerously, setDangerously] = useState(opts.dangerously);
@@ -78,8 +86,9 @@ function App({ opts, onSelect, onQuit }: AppProps) {
   useEffect(() => {
     (async () => {
       try {
-        const root = getConfigRoot();
-        const list = await collectLogFiles(root, {
+        const list = await collectLogFiles({
+          claudeCode: opts.claudeCode,
+          codex: opts.codex,
           includeCorrupted: opts.includeCorrupted,
           includeSubagents: opts.includeSubagents,
           includeHistory: opts.includeHistory,
@@ -125,6 +134,7 @@ function App({ opts, onSelect, onQuit }: AppProps) {
           ignoreCase: opts.ignoreCase,
           fixed: opts.fixed,
           filters,
+          sourceFilter,
           signal: ac.signal,
           onBatch: (r) => {
             if (!ac.signal.aborted) setResults(r);
@@ -147,6 +157,7 @@ function App({ opts, onSelect, onQuit }: AppProps) {
     query,
     files,
     role,
+    sourceFilter,
     projectText,
     cwdOnly,
     opts.ignoreCase,
@@ -197,12 +208,20 @@ function App({ opts, onSelect, onQuit }: AppProps) {
       setDangerously((v) => !v);
       return;
     }
+    if (key.ctrl && input === "b") {
+      setSourceFilter((s) => {
+        const idx = SOURCE_CYCLE.indexOf(s);
+        return SOURCE_CYCLE[(idx + 1) % SOURCE_CYCLE.length] ?? null;
+      });
+      return;
+    }
     if (key.return) {
       const sel = results[selected];
       if (!sel) return;
       onSelect({
         project: sel.project || process.cwd(),
         sessionId: sel.kind === "session" ? sel.sessionId : null,
+        source: sel.source,
         dangerously,
       });
       return;
@@ -259,7 +278,7 @@ function App({ opts, onSelect, onQuit }: AppProps) {
   if (!files) {
     return (
       <Box padding={1}>
-        <Text dimColor>Loading Claude Code logs…</Text>
+        <Text dimColor>Loading conversation logs…</Text>
       </Box>
     );
   }
@@ -273,6 +292,7 @@ function App({ opts, onSelect, onQuit }: AppProps) {
         setQuery={setQuery}
         totalFiles={files.length}
         role={role}
+        sourceFilter={sourceFilter}
         cwdOnly={cwdOnly}
         dangerously={dangerously}
         projectText={projectText}
@@ -313,6 +333,7 @@ function Header(props: {
   setQuery: (s: string) => void;
   totalFiles: number;
   role: Role | null;
+  sourceFilter: Source | null;
   cwdOnly: boolean;
   dangerously: boolean;
   projectText: string | null;
@@ -334,6 +355,9 @@ function Header(props: {
       ? `${props.totalFiles} files indexed`
       : `${props.resultCount}${props.truncated ? "+" : ""} matches · ${props.elapsedMs}ms`;
 
+  const sourceLabel = props.sourceFilter ?? "both";
+  const sourceColorName = sourceColor(props.sourceFilter);
+
   return (
     <Box
       flexDirection="column"
@@ -345,7 +369,7 @@ function Header(props: {
         <Text color="cyan" bold>
           ccgrep
         </Text>
-        <Text dimColor> · claude-code log search </Text>
+        <Text dimColor> · claude-code + codex log search </Text>
         <Box flexGrow={1}>
           <Text> </Text>
         </Box>
@@ -360,7 +384,9 @@ function Header(props: {
         />
       </Box>
       <Box>
-        <Text dimColor>role: </Text>
+        <Text dimColor>source: </Text>
+        <Text color={sourceColorName}>{sourceLabel}</Text>
+        <Text dimColor>   role: </Text>
         <Text color={roleColor(props.role)}>{props.role ?? "all"}</Text>
         <Text dimColor>   project: </Text>
         <Text color="cyan">{projectChip}</Text>
@@ -434,6 +460,8 @@ function ResultItem(props: {
   const marker = selected ? "▸" : " ";
   const markerColor = selected ? "magenta" : undefined;
   const sidechain = entry.kind === "session" && entry.isSidechain ? " ↪" : "";
+  const srcTag = sourceLabel(entry.source);
+  const srcColorName = sourceColor(entry.source);
 
   const snippetWidth = Math.max(20, width - 4);
   const snippet = makeSnippet(entry.text, regex, snippetWidth);
@@ -446,6 +474,9 @@ function ResultItem(props: {
         </Text>
         <Text color="gray">{ts}</Text>
         <Text> </Text>
+        <Text color={srcColorName} bold>
+          {srcTag.padEnd(6)}
+        </Text>
         <Text color="cyan" bold={selected}>
           {projectDisp.padEnd(28)}
         </Text>
@@ -503,6 +534,10 @@ function Preview(props: {
       height={height}
     >
       <Text>
+        <Text color={sourceColor(entry.source)} bold>
+          {sourceLabel(entry.source)}
+        </Text>
+        <Text> · </Text>
         <Text color="gray">{ts}</Text>
         <Text> · </Text>
         <Text color="cyan">{projectDisp}</Text>
@@ -534,7 +569,7 @@ function Footer(props: { dangerously: boolean }) {
   return (
     <Box paddingX={1}>
       <Text dimColor>
-        ↑↓ nav · Enter resume · Tab role · Ctrl+P cwd · Ctrl+D dangerously{props.dangerously ? "✓" : ""} · Esc quit
+        ↑↓ nav · Enter resume · Tab role · Ctrl+B source · Ctrl+P cwd · Ctrl+D dangerously{props.dangerously ? "✓" : ""} · Esc quit
       </Text>
     </Box>
   );
@@ -707,4 +742,19 @@ function roleColor(role: Role | null | undefined): string {
     default:
       return "white";
   }
+}
+
+function sourceColor(source: Source | null | undefined): string {
+  switch (source) {
+    case "claude-code":
+      return "cyan";
+    case "codex":
+      return "magenta";
+    default:
+      return "white";
+  }
+}
+
+function sourceLabel(source: Source): string {
+  return source === "claude-code" ? "claude" : "codex";
 }

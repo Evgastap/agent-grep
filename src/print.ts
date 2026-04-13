@@ -1,5 +1,6 @@
-import { collectLogFiles, getConfigRoot } from "./paths.ts";
-import { parseEntry, type Role } from "./parse.ts";
+import { collectLogFiles, getClaudeRoot, getCodexRoot, sourceOfPath } from "./paths.ts";
+import { parseEntry, type Role, type Source } from "./parse.ts";
+import { getCodexContext } from "./codex-meta.ts";
 import { runRipgrep } from "./search.ts";
 import { formatEntry } from "./format.ts";
 import {
@@ -15,9 +16,12 @@ export interface PrintOptions {
   fixed?: boolean;
   project?: string;
   role?: string;
+  source?: Source;
   since?: string;
   until?: string;
   limit?: number;
+  claudeCode?: boolean;
+  codex?: boolean;
   includeCorrupted?: boolean;
   includeSubagents?: boolean;
   includeHistory?: boolean;
@@ -32,15 +36,21 @@ export async function runPrint(opts: PrintOptions): Promise<number> {
   const color = opts.color ?? false;
   const width = opts.width ?? 120;
 
-  const root = getConfigRoot();
-  const files = await collectLogFiles(root, {
+  const claudeCode = opts.claudeCode ?? true;
+  const codex = opts.codex ?? true;
+
+  const files = await collectLogFiles({
+    claudeCode,
+    codex,
     includeCorrupted: opts.includeCorrupted,
     includeSubagents: opts.includeSubagents,
     includeHistory: opts.includeHistory,
   });
 
   if (files.length === 0) {
-    process.stderr.write(`ccgrep: no log files found under ${root}\n`);
+    process.stderr.write(
+      `ccgrep: no log files found under ${getClaudeRoot()} or ${getCodexRoot()}\n`,
+    );
     return 1;
   }
 
@@ -71,7 +81,12 @@ export async function runPrint(opts: PrintOptions): Promise<number> {
     fixedStrings: opts.fixed,
   })) {
     scanned++;
-    const entry = parseEntry(raw.rawLine);
+    const source = sourceOfPath(raw.filePath);
+    if (opts.source && opts.source !== source) continue;
+
+    const ctx =
+      source === "codex" ? await getCodexContext(raw.filePath) : undefined;
+    const entry = parseEntry(raw.rawLine, source, ctx);
     if (!entry) continue;
     if (!passesFilters(entry, regex, filters)) continue;
 

@@ -137,7 +137,7 @@ function emptyAnsi(): typeof ANSI {
   return out as typeof ANSI;
 }
 
-export const USAGE = `ccgrep — search Claude Code conversation logs
+export const USAGE = `ccgrep — search Claude Code and Codex conversation logs
 
 Usage:
   ccgrep                   Launch interactive TUI (default when TTY)
@@ -148,13 +148,16 @@ Search options:
   -F, --fixed              Treat query as a literal string (not regex)
   -p, --project <glob>     Filter by project path substring
   -r, --role <role>        Filter by role (user|assistant|system|tool)
+      --source <src>       Limit to one source: claude-code | codex | both
       --since <date>       Only matches after date (ISO or YYYY-MM-DD)
       --until <date>       Only matches before date
   -n, --limit <n>          Stop after N results (print mode)
 
 Source options:
-      --no-corrupted       Skip corrupted-sessions-backup/
-      --no-subagents       Skip subagent transcripts
+      --no-claude-code     Skip ~/.claude (respects $CLAUDE_CONFIG_DIR)
+      --no-codex           Skip ~/.codex (respects $CODEX_HOME)
+      --no-corrupted       Skip corrupted-sessions-backup/ (claude only)
+      --no-subagents       Skip subagent transcripts (claude only)
       --no-history         Skip ~/.claude/history.jsonl
 
 Launcher (TUI only):
@@ -172,14 +175,17 @@ TUI keys:
   type…                    Live search across all logs
   ↑ / ↓                    Navigate results
   Enter                    Open: cd into project and resume the session
+                           claude entries → claude --resume <id>
+                           codex entries  → codex resume <id>
   Tab                      Cycle role filter (all→user→assistant→tool)
+  Ctrl+B                   Cycle source filter (both→claude-code→codex)
   Ctrl+P                   Toggle project filter (all / current cwd)
-  Ctrl+D                   Toggle --dangerously-skip-permissions
+  Ctrl+D                   Toggle --dangerously-skip-permissions (claude only)
   Esc                      Quit
 
 Examples:
-  ccgrep                               # interactive
-  ccgrep firestore                     # TUI, pre-filled
+  ccgrep                               # interactive, both sources
+  ccgrep --source codex firestore      # TUI, codex only, pre-filled
   ccgrep -P -i -r user "firebase auth" # force print
-  ccgrep --json "pnpm install" | jq .
+  ccgrep --json --no-codex "pnpm" | jq .
 `;

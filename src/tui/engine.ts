@@ -1,5 +1,7 @@
-import { parseEntry, type LogEntry } from "../parse.ts";
+import { parseEntry, type LogEntry, type Source } from "../parse.ts";
 import { runRipgrep } from "../search.ts";
+import { sourceOfPath } from "../paths.ts";
+import { getCodexContext } from "../codex-meta.ts";
 import {
   compileRegex,
   passesFilters,
@@ -12,6 +14,7 @@ export interface SearchParams {
   ignoreCase: boolean;
   fixed: boolean;
   filters: Filters;
+  sourceFilter?: Source | null;
   signal: AbortSignal;
   maxResults?: number;
   onBatch: (results: LogEntry[]) => void;
@@ -53,9 +56,18 @@ export async function runSearch(opts: SearchParams): Promise<{
       signal: opts.signal,
     })) {
       if (opts.signal.aborted) break;
-      const entry = parseEntry(raw.rawLine);
+
+      const source = sourceOfPath(raw.filePath);
+      if (opts.sourceFilter && opts.sourceFilter !== source) continue;
+
+      const ctx =
+        source === "codex" ? await getCodexContext(raw.filePath) : undefined;
+      if (opts.signal.aborted) break;
+
+      const entry = parseEntry(raw.rawLine, source, ctx);
       if (!entry) continue;
       if (!passesFilters(entry, regex, opts.filters)) continue;
+
       results.push(entry);
       dirty = true;
       if (results.length >= max) {
