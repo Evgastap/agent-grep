@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, render, Text, useInput, useWindowSize } from "ink";
-import TextInput from "ink-text-input";
 import { collectLogFiles, getConfigRoot } from "../paths.ts";
 import type { LogEntry, Role } from "../parse.ts";
 import { compileRegex, parseDateOrNull, type Filters } from "../filters.ts";
@@ -354,11 +353,10 @@ function Header(props: {
       </Box>
       <Box>
         <Text color="magenta">❯ </Text>
-        <TextInput
+        <SearchInput
           value={props.query}
           onChange={props.setQuery}
           placeholder="type to search conversation logs…"
-          focus
         />
       </Box>
       <Box>
@@ -539,6 +537,50 @@ function Footer(props: { dangerously: boolean }) {
         ↑↓ nav · Enter resume · Tab role · Ctrl+P cwd · Ctrl+D dangerously{props.dangerously ? "✓" : ""} · Esc quit
       </Text>
     </Box>
+  );
+}
+
+function SearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  useInput((input, key) => {
+    if (key.ctrl || key.meta) return;
+    if (
+      key.upArrow ||
+      key.downArrow ||
+      key.leftArrow ||
+      key.rightArrow ||
+      key.pageUp ||
+      key.pageDown ||
+      key.tab ||
+      key.return ||
+      key.escape
+    ) {
+      return;
+    }
+    if (key.backspace || key.delete) {
+      if (value.length > 0) onChange(value.slice(0, -1));
+      return;
+    }
+    if (!input) return;
+    if (!/^[\x20-\x7e]+$/.test(input)) return;
+    onChange(value + input);
+  });
+
+  const showPlaceholder = value.length === 0;
+  return (
+    <Text>
+      <Text dimColor={showPlaceholder}>
+        {showPlaceholder ? placeholder ?? "" : value}
+      </Text>
+      <Text inverse>{" "}</Text>
+    </Text>
   );
 }
 
