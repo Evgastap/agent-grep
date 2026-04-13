@@ -1,0 +1,23 @@
+{
+  "name": "ccgrep",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "ccgrep": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "build": "bun run build.ts",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.2.14",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "ink": "^7.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.2.5"
+  }
+}

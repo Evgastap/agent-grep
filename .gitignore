@@ -1,0 +1,4 @@
+node_modules/
+ccgrep
+*.log
+.DS_Store
