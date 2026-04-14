@@ -1,10 +1,10 @@
 {
-  "name": "cc-history",
+  "name": "agent-grep",
   "version": "0.1.0",
-  "description": "Interactive grep across Claude Code and Codex session history, with a TUI and print mode.",
+  "description": "Interactive grep across Claude Code and Codex CLI session history, with a TUI and print mode.",
   "type": "module",
   "bin": {
-    "cc-history": "./dist/cc-history.js"
+    "agent-grep": "./dist/agent-grep.js"
   },
   "files": [
     "dist"
@@ -22,19 +22,21 @@
     "claude",
     "claude-code",
     "codex",
+    "agent",
     "grep",
     "cli",
     "tui",
-    "search"
+    "search",
+    "history"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Evgastap/cc-history.git"
+    "url": "git+https://github.com/Evgastap/agent-grep.git"
   },
   "bugs": {
-    "url": "https://github.com/Evgastap/cc-history/issues"
+    "url": "https://github.com/Evgastap/agent-grep/issues"
   },
-  "homepage": "https://github.com/Evgastap/cc-history#readme",
+  "homepage": "https://github.com/Evgastap/agent-grep#readme",
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest",

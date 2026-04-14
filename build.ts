@@ -42,6 +42,6 @@ const withShebang = code.startsWith("#!")
   : SHEBANG + code;
 
 mkdirSync("./dist", { recursive: true });
-writeFileSync("./dist/cc-history.js", withShebang);
-chmodSync("./dist/cc-history.js", 0o755);
-console.log("Built ./dist/cc-history.js");
+writeFileSync("./dist/agent-grep.js", withShebang);
+chmodSync("./dist/agent-grep.js", 0o755);
+console.log("Built ./dist/agent-grep.js");

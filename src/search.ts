@@ -47,7 +47,7 @@ async function resolveBackend(): Promise<Backend> {
   }
 
   throw new Error(
-    "cc-history: no search backend found — install ripgrep or grep on PATH",
+    "agent-grep: no search backend found — install ripgrep or grep on PATH",
   );
 }
 
