@@ -19,6 +19,7 @@ const result = await Bun.build({
   target: "node",
   format: "esm",
   minify: true,
+  external: ["@vscode/ripgrep"],
   plugins: [stubReactDevtools],
 });
 

@@ -1,5 +1,5 @@
 import { parseEntry, type LogEntry, type Source } from "../parse.ts";
-import { runRipgrep } from "../search.ts";
+import { streamMatches } from "../search.ts";
 import { sourceOfPath } from "../paths.ts";
 import { getCodexContext } from "../codex-meta.ts";
 import {
@@ -48,7 +48,7 @@ export async function runSearch(opts: SearchParams): Promise<{
   }, 40);
 
   try {
-    for await (const raw of runRipgrep({
+    for await (const raw of streamMatches({
       query: opts.query,
       files: opts.files,
       caseInsensitive: opts.ignoreCase,

@@ -8,7 +8,7 @@ Interactive grep across your Claude Code and Codex CLI session history.
 npm install -g ccgrep
 ```
 
-Requires [ripgrep](https://github.com/BurntSushi/ripgrep) on `PATH`.
+Ships a bundled `ripgrep` (via `@vscode/ripgrep`). Falls back to system `rg`, then `grep`.
 
 ## Use
 

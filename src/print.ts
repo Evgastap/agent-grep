@@ -1,7 +1,7 @@
 import { collectLogFiles, getClaudeRoot, getCodexRoot, sourceOfPath } from "./paths.ts";
 import { parseEntry, type Role, type Source } from "./parse.ts";
 import { getCodexContext } from "./codex-meta.ts";
-import { runRipgrep } from "./search.ts";
+import { streamMatches } from "./search.ts";
 import { formatEntry } from "./format.ts";
 import {
   compileRegex,
@@ -74,7 +74,7 @@ export async function runPrint(opts: PrintOptions): Promise<number> {
   let scanned = 0;
   const matchedFiles = new Set<string>();
 
-  for await (const raw of runRipgrep({
+  for await (const raw of streamMatches({
     query: opts.query,
     files,
     caseInsensitive: opts.ignoreCase,
