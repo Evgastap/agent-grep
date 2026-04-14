@@ -137,11 +137,11 @@ function emptyAnsi(): typeof ANSI {
   return out as typeof ANSI;
 }
 
-export const USAGE = `ccgrep — search Claude Code and Codex conversation logs
+export const USAGE = `cc-history — search Claude Code and Codex conversation logs
 
 Usage:
-  ccgrep                   Launch interactive TUI (default when TTY)
-  ccgrep [options] <query> Launch TUI prefilled, or print when piped
+  cc-history                   Launch interactive TUI (default when TTY)
+  cc-history [options] <query> Launch TUI prefilled, or print when piped
 
 Search options:
   -i, --ignore-case        Case-insensitive search (default ON in TUI)
@@ -184,8 +184,8 @@ TUI keys:
   Esc                      Quit
 
 Examples:
-  ccgrep                               # interactive, both sources
-  ccgrep --source codex firestore      # TUI, codex only, pre-filled
-  ccgrep -P -i -r user "firebase auth" # force print
-  ccgrep --json --no-codex "pnpm" | jq .
+  cc-history                               # interactive, both sources
+  cc-history --source codex firestore      # TUI, codex only, pre-filled
+  cc-history -P -i -r user "firebase auth" # force print
+  cc-history --json --no-codex "pnpm" | jq .
 `;

@@ -49,7 +49,7 @@ export async function runPrint(opts: PrintOptions): Promise<number> {
 
   if (files.length === 0) {
     process.stderr.write(
-      `ccgrep: no log files found under ${getClaudeRoot()} or ${getCodexRoot()}\n`,
+      `cc-history: no log files found under ${getClaudeRoot()} or ${getCodexRoot()}\n`,
     );
     return 1;
   }
@@ -58,7 +58,7 @@ export async function runPrint(opts: PrintOptions): Promise<number> {
   try {
     regex = compileRegex(opts.query, { ignoreCase: opts.ignoreCase, fixed: opts.fixed });
   } catch (err) {
-    process.stderr.write(`ccgrep: invalid regex: ${(err as Error).message}\n`);
+    process.stderr.write(`cc-history: invalid regex: ${(err as Error).message}\n`);
     return 2;
   }
 

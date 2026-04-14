@@ -1,11 +1,11 @@
-# ccgrep
+# cc-history
 
 Interactive grep across your Claude Code and Codex CLI session history.
 
 ## Install
 
 ```sh
-npm install -g ccgrep
+npm install -g cc-history
 ```
 
 Ships a bundled `ripgrep` (via `@vscode/ripgrep`). Falls back to system `rg`, then `grep`.
@@ -13,10 +13,10 @@ Ships a bundled `ripgrep` (via `@vscode/ripgrep`). Falls back to system `rg`, th
 ## Use
 
 ```sh
-ccgrep                     # launch TUI
-ccgrep "firebase auth"     # TUI, prefilled
-ccgrep -P "pnpm"           # force print mode
-ccgrep --json "pnpm" | jq  # pipe JSON
+cc-history                     # launch TUI
+cc-history "firebase auth"     # TUI, prefilled
+cc-history -P "pnpm"           # force print mode
+cc-history --json "pnpm" | jq  # pipe JSON
 ```
 
 Searches `~/.claude` and `~/.codex` by default. `Enter` on a result `cd`s into the project and resumes the session via `claude --resume` or `codex resume`.
@@ -34,4 +34,4 @@ Searches `~/.claude` and `~/.codex` by default. `Enter` on a result `cd`s into t
 | `Ctrl+D` | Toggle `--dangerously-skip-permissions`           |
 | `Esc`    | Quit                                              |
 
-`ccgrep --help` for all flags.
+`cc-history --help` for all flags.

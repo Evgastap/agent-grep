@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "ccgrep",
+      "name": "cc-history",
       "dependencies": {
         "@vscode/ripgrep": "^1.17.1",
       },

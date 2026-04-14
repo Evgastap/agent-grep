@@ -367,7 +367,7 @@ function Header(props: {
     >
       <Box>
         <Text color="cyan" bold>
-          ccgrep
+          cc-history
         </Text>
         <Text dimColor> · claude-code + codex log search </Text>
         <Box flexGrow={1}>

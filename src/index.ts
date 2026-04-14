@@ -40,7 +40,7 @@ if (values.help) {
 const query = positionals.join(" ");
 const limit = values.limit ? Number.parseInt(values.limit, 10) : undefined;
 if (limit !== undefined && (Number.isNaN(limit) || limit <= 0)) {
-  console.error(`ccgrep: invalid --limit: ${values.limit}`);
+  console.error(`cc-history: invalid --limit: ${values.limit}`);
   process.exit(2);
 }
 
@@ -51,7 +51,7 @@ if (values.source) {
   } else if (values.source === "codex") {
     sourceFilter = "codex";
   } else if (values.source !== "both" && values.source !== "all") {
-    console.error(`ccgrep: invalid --source: ${values.source} (expected claude-code|codex|both)`);
+    console.error(`cc-history: invalid --source: ${values.source} (expected claude-code|codex|both)`);
     process.exit(2);
   }
 }
@@ -59,7 +59,7 @@ if (values.source) {
 const claudeCode = !values["no-claude-code"] && sourceFilter !== "codex";
 const codex = !values["no-codex"] && sourceFilter !== "claude-code";
 if (!claudeCode && !codex) {
-  console.error("ccgrep: at least one source must be enabled");
+  console.error("cc-history: at least one source must be enabled");
   process.exit(2);
 }
 
@@ -74,8 +74,8 @@ const forcePrint = values.print || values.json || values.files || !isTTY;
 
 if (forcePrint) {
   if (!query) {
-    console.error("ccgrep: query required in print mode (pipe/--print/--json/--files)");
-    console.error("       try: ccgrep --help");
+    console.error("cc-history: query required in print mode (pipe/--print/--json/--files)");
+    console.error("       try: cc-history --help");
     process.exit(2);
   }
   const code = await runPrint({
@@ -132,7 +132,7 @@ const child = spawn(bin, launchArgs, {
 const code = await new Promise<number>((resolve) => {
   child.once("close", (c) => resolve(c ?? 0));
   child.once("error", (err) => {
-    console.error(`ccgrep: failed to launch ${bin}: ${err.message}`);
+    console.error(`cc-history: failed to launch ${bin}: ${err.message}`);
     resolve(1);
   });
 });

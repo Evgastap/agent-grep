@@ -1,10 +1,10 @@
 {
-  "name": "ccgrep",
+  "name": "cc-history",
   "version": "0.1.0",
   "description": "Interactive grep across Claude Code and Codex session history, with a TUI and print mode.",
   "type": "module",
   "bin": {
-    "ccgrep": "./dist/ccgrep.js"
+    "cc-history": "./dist/cc-history.js"
   },
   "files": [
     "dist"
@@ -29,12 +29,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Evgastap/ccgrep.git"
+    "url": "git+https://github.com/Evgastap/cc-history.git"
   },
   "bugs": {
-    "url": "https://github.com/Evgastap/ccgrep/issues"
+    "url": "https://github.com/Evgastap/cc-history/issues"
   },
-  "homepage": "https://github.com/Evgastap/ccgrep#readme",
+  "homepage": "https://github.com/Evgastap/cc-history#readme",
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest",
