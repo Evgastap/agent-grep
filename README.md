@@ -1,0 +1,37 @@
+# ccgrep
+
+Interactive grep across your Claude Code and Codex CLI session history.
+
+## Install
+
+```sh
+npm install -g ccgrep
+```
+
+Requires [ripgrep](https://github.com/BurntSushi/ripgrep) on `PATH`.
+
+## Use
+
+```sh
+ccgrep                     # launch TUI
+ccgrep "firebase auth"     # TUI, prefilled
+ccgrep -P "pnpm"           # force print mode
+ccgrep --json "pnpm" | jq  # pipe JSON
+```
+
+Searches `~/.claude` and `~/.codex` by default. `Enter` on a result `cd`s into the project and resumes the session via `claude --resume` or `codex resume`.
+
+## TUI keys
+
+| Key      | Action                                            |
+| -------- | ------------------------------------------------- |
+| type…    | Live search                                       |
+| ↑ / ↓    | Navigate results                                  |
+| `Enter`  | Resume the session in its project dir             |
+| `Tab`    | Cycle role filter (all → user → assistant → tool) |
+| `Ctrl+B` | Cycle source (both → claude-code → codex)        |
+| `Ctrl+P` | Toggle project filter (all / cwd)                 |
+| `Ctrl+D` | Toggle `--dangerously-skip-permissions`           |
+| `Esc`    | Quit                                              |
+
+`ccgrep --help` for all flags.
