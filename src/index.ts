@@ -1,11 +1,12 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { parseArgs } from "node:util";
 import { runPrint } from "./print.ts";
 import { USAGE } from "./format.ts";
 import type { Source } from "./parse.ts";
 
 const { values, positionals } = parseArgs({
-  args: Bun.argv.slice(2),
+  args: process.argv.slice(2),
   options: {
     "ignore-case": { type: "boolean", short: "i" },
     fixed: { type: "boolean", short: "F" },
@@ -124,12 +125,18 @@ if (!intent) {
 }
 
 const { bin, args: launchArgs } = buildLaunchCommand(intent);
-const proc = Bun.spawn([bin, ...launchArgs], {
+const child = spawn(bin, launchArgs, {
   cwd: intent.project,
-  stdio: ["inherit", "inherit", "inherit"],
+  stdio: "inherit",
 });
-const code = await proc.exited;
-process.exit(code ?? 0);
+const code = await new Promise<number>((resolve) => {
+  child.once("close", (c) => resolve(c ?? 0));
+  child.once("error", (err) => {
+    console.error(`ccgrep: failed to launch ${bin}: ${err.message}`);
+    resolve(1);
+  });
+});
+process.exit(code);
 
 function buildLaunchCommand(intent: {
   sessionId: string | null;

@@ -1,22 +1,46 @@
 {
   "name": "ccgrep",
   "version": "0.1.0",
+  "description": "Interactive grep across Claude Code and Codex session history, with a TUI and print mode.",
   "type": "module",
   "bin": {
-    "ccgrep": "./src/index.ts"
+    "ccgrep": "./dist/ccgrep.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "start": "bun run src/index.ts",
     "build": "bun run build.ts",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "prepublishOnly": "bun run build"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "codex",
+    "grep",
+    "cli",
+    "tui",
+    "search"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Evgastap/ccgrep.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Evgastap/ccgrep/issues"
+  },
+  "homepage": "https://github.com/Evgastap/ccgrep#readme",
+  "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest",
     "@types/react": "^19.2.14",
-    "typescript": "^5.6.0"
-  },
-  "dependencies": {
     "ink": "^7.0.0",
-    "react": "^19.2.5"
+    "react": "^19.2.5",
+    "typescript": "^5.6.0"
   }
 }

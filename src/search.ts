@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 export interface SearchOptions {
   query: string;
   files: string[];
@@ -25,10 +27,10 @@ export async function* runRipgrep(opts: SearchOptions): AsyncGenerator<RawMatch>
     const chunk = opts.files.slice(i, i + CHUNK_SIZE);
     if (chunk.length === 0) continue;
 
-    const proc = Bun.spawn(["rg", ...baseArgs, ...chunk], {
-      stdout: "pipe",
-      stderr: "ignore",
+    const proc = spawn("rg", [...baseArgs, ...chunk], {
+      stdio: ["ignore", "pipe", "ignore"],
     });
+    proc.on("error", () => {});
 
     const onAbort = () => {
       try {
@@ -43,15 +45,17 @@ export async function* runRipgrep(opts: SearchOptions): AsyncGenerator<RawMatch>
       }
     }
 
-    const reader = proc.stdout.getReader();
+    const exited = new Promise<void>((resolve) => {
+      proc.once("close", () => resolve());
+      proc.once("error", () => resolve());
+    });
+
     const decoder = new TextDecoder();
     let buffer = "";
 
     try {
-      while (true) {
+      for await (const value of proc.stdout as AsyncIterable<Buffer>) {
         if (opts.signal?.aborted) break;
-        const { done, value } = await reader.read();
-        if (done) break;
         buffer += decoder.decode(value, { stream: true });
         let nl: number;
         while ((nl = buffer.indexOf("\n")) !== -1) {
@@ -62,17 +66,17 @@ export async function* runRipgrep(opts: SearchOptions): AsyncGenerator<RawMatch>
           if (match) yield match;
         }
       }
+      buffer += decoder.decode();
       if (buffer && !opts.signal?.aborted) {
         const match = parseRgEvent(buffer);
         if (match) yield match;
       }
     } finally {
-      reader.releaseLock();
       opts.signal?.removeEventListener("abort", onAbort);
       try {
         proc.kill();
       } catch {}
-      await proc.exited.catch(() => {});
+      await exited;
     }
   }
 }

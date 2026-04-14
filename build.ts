@@ -1,4 +1,4 @@
-import { plugin } from "bun";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 
 const stubReactDevtools = {
   name: "stub-react-devtools",
@@ -16,11 +16,9 @@ const stubReactDevtools = {
 
 const result = await Bun.build({
   entrypoints: ["./src/index.ts"],
-  target: "bun",
+  target: "node",
+  format: "esm",
   minify: true,
-  compile: {
-    outfile: "./ccgrep",
-  },
   plugins: [stubReactDevtools],
 });
 
@@ -30,4 +28,19 @@ if (!result.success) {
   process.exit(1);
 }
 
-console.log("Built ./ccgrep");
+const output = result.outputs[0];
+if (!output) {
+  console.error("Build produced no outputs");
+  process.exit(1);
+}
+
+const SHEBANG = "#!/usr/bin/env node\n";
+const code = await output.text();
+const withShebang = code.startsWith("#!")
+  ? code
+  : SHEBANG + code;
+
+mkdirSync("./dist", { recursive: true });
+writeFileSync("./dist/ccgrep.js", withShebang);
+chmodSync("./dist/ccgrep.js", 0o755);
+console.log("Built ./dist/ccgrep.js");

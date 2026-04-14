@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import type { CodexContext } from "./parse.ts";
 
 const cache = new Map<string, CodexContext>();
@@ -45,32 +46,29 @@ async function loadCodexContext(filePath: string): Promise<CodexContext> {
 }
 
 async function readFirstLine(filePath: string): Promise<string | null> {
+  let stream: ReturnType<typeof createReadStream> | null = null;
   try {
-    const file = Bun.file(filePath);
-    const reader = file.stream().getReader();
+    stream = createReadStream(filePath);
+    stream.on("error", () => {});
     const decoder = new TextDecoder();
     let buffer = "";
     let totalBytes = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        totalBytes += value.byteLength;
-        buffer += decoder.decode(value, { stream: true });
-        const nl = buffer.indexOf("\n");
-        if (nl !== -1) return buffer.slice(0, nl);
-        if (totalBytes > MAX_FIRST_LINE_BYTES) return null;
-      }
-      buffer += decoder.decode();
+    for await (const chunk of stream as AsyncIterable<Buffer>) {
+      totalBytes += chunk.byteLength;
+      buffer += decoder.decode(chunk, { stream: true });
       const nl = buffer.indexOf("\n");
-      return nl === -1 ? (buffer || null) : buffer.slice(0, nl);
-    } finally {
-      try {
-        reader.releaseLock();
-      } catch {}
+      if (nl !== -1) return buffer.slice(0, nl);
+      if (totalBytes > MAX_FIRST_LINE_BYTES) return null;
     }
+    buffer += decoder.decode();
+    const nl = buffer.indexOf("\n");
+    return nl === -1 ? (buffer || null) : buffer.slice(0, nl);
   } catch {
     return null;
+  } finally {
+    try {
+      stream?.destroy();
+    } catch {}
   }
 }
 

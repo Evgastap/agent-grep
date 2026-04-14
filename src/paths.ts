@@ -1,6 +1,6 @@
+import { access, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Glob } from "bun";
 import type { Source } from "./parse.ts";
 
 export interface CollectOptions {
@@ -79,13 +79,58 @@ async function scanPatterns(
   into: Set<string>,
 ): Promise<void> {
   for (const p of patterns) {
-    const glob = new Glob(p);
     try {
-      for await (const match of glob.scan({ cwd: root, absolute: true })) {
-        into.add(match);
-      }
+      await walkPattern(root, p.split("/"), into);
     } catch {
       // Root may not exist (e.g. no codex installed); skip silently.
     }
   }
+}
+
+async function walkPattern(
+  base: string,
+  segments: string[],
+  into: Set<string>,
+): Promise<void> {
+  if (segments.length === 0) return;
+  const head = segments[0]!;
+  const rest = segments.slice(1);
+  const isLeaf = rest.length === 0;
+
+  if (!head.includes("*")) {
+    const next = join(base, head);
+    if (isLeaf) {
+      try {
+        await access(next);
+        into.add(next);
+      } catch {}
+      return;
+    }
+    await walkPattern(next, rest, into);
+    return;
+  }
+
+  const regex = segmentToRegex(head);
+  let entries;
+  try {
+    entries = await readdir(base, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!regex.test(entry.name)) continue;
+    const next = join(base, entry.name);
+    if (isLeaf) {
+      if (entry.isFile()) into.add(next);
+    } else if (entry.isDirectory()) {
+      await walkPattern(next, rest, into);
+    }
+  }
+}
+
+function segmentToRegex(seg: string): RegExp {
+  const escaped = seg
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, "[^/]*");
+  return new RegExp(`^${escaped}$`);
 }
