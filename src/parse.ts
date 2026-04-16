@@ -30,6 +30,7 @@ export type LogEntry = HistoryEntry | SessionEntry;
 export interface CodexContext {
   sessionId: string;
   project: string;
+  forkedFromId?: string;
 }
 
 export function parseEntry(

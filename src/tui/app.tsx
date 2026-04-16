@@ -2,9 +2,14 @@ import { homedir } from "node:os";
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, render, Text, useInput, useWindowSize } from "ink";
 import { collectLogFiles } from "../paths.ts";
-import type { LogEntry, Role, Source } from "../parse.ts";
+import type { Role, Source } from "../parse.ts";
 import { compileRegex, parseDateOrNull, type Filters } from "../filters.ts";
-import { runSearch } from "./engine.ts";
+import {
+  runSearch,
+  type ResultRow,
+  type SessionGroupRow,
+  type HistoryRow,
+} from "./engine.ts";
 
 const HOME = homedir();
 
@@ -69,7 +74,7 @@ function App({ opts, onSelect, onQuit }: AppProps) {
   const [files, setFiles] = useState<string[] | null>(null);
   const [filesErr, setFilesErr] = useState<string | null>(null);
   const [query, setQuery] = useState(opts.initialQuery);
-  const [results, setResults] = useState<LogEntry[]>([]);
+  const [results, setResults] = useState<ResultRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -173,8 +178,16 @@ function App({ opts, onSelect, onQuit }: AppProps) {
   }, [results.length, selected]);
 
   useInput((input, key) => {
-    if (key.escape || (key.ctrl && input === "c")) {
+    if (key.ctrl && input === "c") {
       onQuit();
+      return;
+    }
+    if (key.escape) {
+      if (query.length > 0) {
+        setQuery("");
+      } else {
+        onQuit();
+      }
       return;
     }
     if (key.upArrow) {
@@ -218,12 +231,7 @@ function App({ opts, onSelect, onQuit }: AppProps) {
     if (key.return) {
       const sel = results[selected];
       if (!sel) return;
-      onSelect({
-        project: sel.project || process.cwd(),
-        sessionId: sel.kind === "session" ? sel.sessionId : null,
-        source: sel.source,
-        dangerously,
-      });
+      onSelect(buildLaunchIntent(sel, dangerously));
       return;
     }
   });
@@ -238,12 +246,13 @@ function App({ opts, onSelect, onQuit }: AppProps) {
     height - headerLines - footerLines - frameOverhead,
   );
   const previewHeight = Math.max(
-    6,
-    Math.min(16, Math.floor(remaining * 0.42)),
+    8,
+    Math.min(18, Math.floor(remaining * 0.5)),
   );
+  // One line per row, plus the blank line between.
+  const rowStride = 2;
   const resultsHeight = Math.max(6, remaining - previewHeight);
-  const itemsPerRow = 2;
-  const viewportItems = Math.max(3, Math.floor(resultsHeight / itemsPerRow));
+  const viewportItems = Math.max(3, Math.floor(resultsHeight / rowStride));
 
   const visibleStart = Math.max(
     0,
@@ -283,7 +292,11 @@ function App({ opts, onSelect, onQuit }: AppProps) {
     );
   }
 
-  const selectedEntry = results[selected] ?? null;
+  const selectedRow = results[selected] ?? null;
+  const totalMatches = results.reduce(
+    (acc, r) => acc + (r.kind === "session" ? r.matchCount : 1),
+    0,
+  );
 
   return (
     <Box flexDirection="column" width={width}>
@@ -294,13 +307,12 @@ function App({ opts, onSelect, onQuit }: AppProps) {
         role={role}
         sourceFilter={sourceFilter}
         cwdOnly={cwdOnly}
-        dangerously={dangerously}
         projectText={projectText}
-        resultCount={results.length}
+        rowCount={results.length}
+        totalMatches={totalMatches}
         searching={searching}
         elapsedMs={elapsedMs}
         truncated={truncated}
-        width={width}
       />
       <ResultsList
         results={visibleResults}
@@ -315,10 +327,9 @@ function App({ opts, onSelect, onQuit }: AppProps) {
               ? "searching…"
               : "no matches"
         }
-        totalCount={results.length}
       />
       <Preview
-        entry={selectedEntry}
+        row={selectedRow}
         regex={regex}
         height={previewHeight}
         width={width - 4}
@@ -328,6 +339,23 @@ function App({ opts, onSelect, onQuit }: AppProps) {
   );
 }
 
+function buildLaunchIntent(row: ResultRow, dangerously: boolean): LaunchIntent {
+  if (row.kind === "session") {
+    return {
+      project: row.project || process.cwd(),
+      sessionId: row.sessionId,
+      source: row.source,
+      dangerously,
+    };
+  }
+  return {
+    project: row.entry.project || process.cwd(),
+    sessionId: null,
+    source: row.entry.source,
+    dangerously,
+  };
+}
+
 function Header(props: {
   query: string;
   setQuery: (s: string) => void;
@@ -335,28 +363,33 @@ function Header(props: {
   role: Role | null;
   sourceFilter: Source | null;
   cwdOnly: boolean;
-  dangerously: boolean;
   projectText: string | null;
-  resultCount: number;
+  rowCount: number;
+  totalMatches: number;
   searching: boolean;
   elapsedMs: number;
   truncated: boolean;
-  width: number;
 }) {
   const projectChip = props.cwdOnly
-    ? `cwd:${shortenPath(process.cwd())}`
+    ? `cwd`
     : props.projectText
-      ? `path:${props.projectText}`
+      ? `path:${truncate(props.projectText, 24)}`
       : "all";
 
-  const stat = props.searching
-    ? "searching…"
-    : props.query.trim().length < 2
-      ? `${props.totalFiles} files indexed`
-      : `${props.resultCount}${props.truncated ? "+" : ""} matches · ${props.elapsedMs}ms`;
+  let stat: string;
+  if (props.searching) {
+    stat = "searching…";
+  } else if (props.query.trim().length < 2) {
+    stat = `${props.totalFiles} files indexed`;
+  } else if (props.rowCount === 0) {
+    stat = "no matches";
+  } else {
+    const suffix = props.truncated ? "+" : "";
+    const sessionWord = props.rowCount === 1 ? "session" : "sessions";
+    stat = `${props.rowCount}${suffix} ${sessionWord} · ${props.totalMatches}${suffix} matches · ${props.elapsedMs}ms`;
+  }
 
-  const sourceLabel = props.sourceFilter ?? "both";
-  const sourceColorName = sourceColor(props.sourceFilter);
+  const sourceLabel = props.sourceFilter ?? "both sources";
 
   return (
     <Box
@@ -369,7 +402,7 @@ function Header(props: {
         <Text color="cyan" bold>
           agent-grep
         </Text>
-        <Text dimColor> · claude-code + codex log search </Text>
+        <Text dimColor> · session search</Text>
         <Box flexGrow={1}>
           <Text> </Text>
         </Box>
@@ -384,29 +417,24 @@ function Header(props: {
         />
       </Box>
       <Box>
-        <Text dimColor>source: </Text>
-        <Text color={sourceColorName}>{sourceLabel}</Text>
-        <Text dimColor>   role: </Text>
-        <Text color={roleColor(props.role)}>{props.role ?? "all"}</Text>
-        <Text dimColor>   project: </Text>
+        <Text dimColor>  </Text>
+        <Text color={sourceColor(props.sourceFilter)}>{sourceLabel}</Text>
+        <Text dimColor>  ·  </Text>
+        <Text color={roleColor(props.role)}>{props.role ?? "all roles"}</Text>
+        <Text dimColor>  ·  </Text>
         <Text color="cyan">{projectChip}</Text>
-        <Text dimColor>   --dangerously: </Text>
-        <Text color={props.dangerously ? "red" : "gray"}>
-          {props.dangerously ? "ON" : "off"}
-        </Text>
       </Box>
     </Box>
   );
 }
 
 function ResultsList(props: {
-  results: LogEntry[];
+  results: ResultRow[];
   startIndex: number;
   selectedIndex: number;
   regex: RegExp | null;
   width: number;
   emptyHint: string;
-  totalCount: number;
 }) {
   if (props.results.length === 0) {
     return (
@@ -427,13 +455,13 @@ function ResultsList(props: {
       paddingX={1}
       flexDirection="column"
     >
-      {props.results.map((entry, i) => {
+      {props.results.map((row, i) => {
         const absoluteIdx = props.startIndex + i;
         const isSelected = absoluteIdx === props.selectedIndex;
         return (
           <ResultItem
-            key={`r-${absoluteIdx}`}
-            entry={entry}
+            key={row.key}
+            row={row}
             regex={props.regex}
             width={props.width}
             selected={isSelected}
@@ -444,51 +472,48 @@ function ResultsList(props: {
   );
 }
 
+const PROJECT_COL = 26;
+const TIME_COL = 9;
+const COUNT_COL = 6;
+// marker(2) + dot(2) + project + 2 + time + 2 + count + 1 = 17 + project
+const FIXED_LEFT = 2 + 2 + PROJECT_COL + 2 + TIME_COL + 2 + COUNT_COL + 1;
+
 function ResultItem(props: {
-  entry: LogEntry;
+  row: ResultRow;
   regex: RegExp | null;
   width: number;
   selected: boolean;
 }) {
-  const { entry, regex, width, selected } = props;
-  const ts = formatCompactTimestamp(entry.timestamp);
-  const projectDisp = truncate(shortenPath(entry.project), 28);
-  const sessionDisp =
-    entry.kind === "session" ? entry.sessionId.slice(0, 8) : "history ";
-  const role = entry.role;
-  const rColor = roleColor(role);
-  const marker = selected ? "▸" : " ";
+  const { row, regex, width, selected } = props;
+  const marker = selected ? "▸ " : "  ";
   const markerColor = selected ? "magenta" : undefined;
-  const sidechain = entry.kind === "session" && entry.isSidechain ? " ↪" : "";
-  const srcTag = sourceLabel(entry.source);
-  const srcColorName = sourceColor(entry.source);
 
-  const snippetWidth = Math.max(20, width - 4);
-  const snippet = makeSnippet(entry.text, regex, snippetWidth);
+  const { projectDisp, relative, countStr, countColor, snippetSrc, roleOfSnippet } =
+    describeRow(row);
+
+  const snippetWidth = Math.max(20, width - FIXED_LEFT - 2);
+  const snippet = makeSnippet(snippetSrc, regex, snippetWidth);
 
   return (
-    <Box flexDirection="column" marginBottom={0}>
-      <Text>
+    <Box flexDirection="column" marginBottom={1}>
+      <Text wrap="truncate-end">
         <Text color={markerColor} bold={selected}>
-          {marker}{" "}
+          {marker}
         </Text>
-        <Text color="gray">{ts}</Text>
-        <Text> </Text>
-        <Text color={srcColorName} bold>
-          {srcTag.padEnd(6)}
+        <Text color={sourceColor(row.kind === "session" ? row.source : row.entry.source)}>
+          ●{" "}
         </Text>
-        <Text color="cyan" bold={selected}>
-          {projectDisp.padEnd(28)}
+        <Text color={selected ? "cyan" : "white"} bold={selected}>
+          {padEnd(projectDisp, PROJECT_COL)}
         </Text>
+        <Text>  </Text>
+        <Text color="gray">{padEnd(relative, TIME_COL)}</Text>
+        <Text>  </Text>
+        <Text color={countColor}>{padEnd(countStr, COUNT_COL)}</Text>
         <Text> </Text>
-        <Text color="yellow">{sessionDisp}</Text>
-        <Text> </Text>
-        <Text color={rColor}>{role}</Text>
-        <Text dimColor>{sidechain}</Text>
-      </Text>
-      <Text>
-        <Text>{"  "}</Text>
-        <Text dimColor>{snippet.prefix}</Text>
+        <Text color={roleColor(roleOfSnippet)} dimColor={!selected}>
+          {snippet.prefix}
+        </Text>
         <HighlightedSpans text={snippet.slice} regex={regex} />
         <Text dimColor>{snippet.suffix}</Text>
       </Text>
@@ -496,14 +521,43 @@ function ResultItem(props: {
   );
 }
 
+function describeRow(row: ResultRow): {
+  projectDisp: string;
+  relative: string;
+  countStr: string;
+  countColor: string;
+  snippetSrc: string;
+  roleOfSnippet: Role;
+} {
+  if (row.kind === "session") {
+    const latest = row.matches[0];
+    return {
+      projectDisp: truncate(projectLabel(row.project), PROJECT_COL),
+      relative: formatRelativeTime(row.lastMatchTime),
+      countStr: `×${row.matchCount}`,
+      countColor: row.matchCount >= 5 ? "yellow" : "gray",
+      snippetSrc: latest?.text ?? "",
+      roleOfSnippet: latest?.role ?? "unknown",
+    };
+  }
+  return {
+    projectDisp: truncate(`${projectLabel(row.entry.project)} · history`, PROJECT_COL),
+    relative: formatRelativeTime(row.entry.timestamp),
+    countStr: "",
+    countColor: "gray",
+    snippetSrc: row.entry.text,
+    roleOfSnippet: "user",
+  };
+}
+
 function Preview(props: {
-  entry: LogEntry | null;
+  row: ResultRow | null;
   regex: RegExp | null;
   height: number;
   width: number;
 }) {
-  const { entry, regex, height, width } = props;
-  if (!entry) {
+  const { row, regex, height, width } = props;
+  if (!row) {
     return (
       <Box
         borderStyle="round"
@@ -511,19 +565,102 @@ function Preview(props: {
         paddingX={1}
         height={height}
       >
-        <Text dimColor>No selection. Type to search, ↓ to pick a result.</Text>
+        <Text dimColor>type to search, ↓ to pick a result, Enter to resume</Text>
       </Box>
     );
   }
-  const ts = formatFullTimestamp(entry.timestamp);
-  const projectDisp = shortenPath(entry.project);
-  const sessionDisp =
-    entry.kind === "session" ? entry.sessionId : "(history entry)";
+  if (row.kind === "session") {
+    return <SessionPreview row={row} regex={regex} height={height} width={width} />;
+  }
+  return <HistoryPreview row={row} regex={regex} height={height} width={width} />;
+}
 
-  const bodyLines = Math.max(1, height - 5);
-  const rawLines = entry.text.split("\n");
-  const contentLines = centerOnMatch(rawLines, regex, bodyLines);
-  const truncatedLines = rawLines.length > bodyLines;
+function SessionPreview(props: {
+  row: SessionGroupRow;
+  regex: RegExp | null;
+  height: number;
+  width: number;
+}) {
+  const { row, regex, height, width } = props;
+  const projectDisp = projectLabel(row.project);
+  const branchDisp = row.gitBranch ?? "";
+  const spanDisp = describeSpan(row.firstMatchTime, row.lastMatchTime);
+
+  const bodyLines = Math.max(1, height - 4);
+  const shown = row.matches.slice(0, bodyLines);
+  const hidden = row.matchCount - shown.length;
+
+  const timeW = 9;
+  const roleW = 10;
+  // width here is already (outer - 4). The SessionPreview box eats another 4
+  // (border + padding). Reserve columns for ellipses on top of the snippet.
+  const snippetW = Math.max(20, width - 4 - (timeW + 2 + roleW + 2) - 2);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="cyan"
+      paddingX={1}
+      height={height}
+    >
+      <Text>
+        <Text color={sourceColor(row.source)} bold>
+          ●{" "}
+        </Text>
+        <Text color="cyan" bold>
+          {projectDisp}
+        </Text>
+        {branchDisp ? (
+          <>
+            <Text dimColor>  on  </Text>
+            <Text color="green">{branchDisp}</Text>
+          </>
+        ) : null}
+        <Text dimColor>  ·  </Text>
+        <Text color="yellow">{row.matchCount} matches</Text>
+        <Text dimColor>  ·  </Text>
+        <Text color="gray">{spanDisp}</Text>
+      </Text>
+      <Box flexDirection="column" marginTop={1}>
+        {shown.map((m, i) => (
+          <Text key={`m-${i}`} wrap="truncate-end">
+            <Text color="gray">{padEnd(formatShortTime(m.timestamp), timeW)}</Text>
+            <Text>  </Text>
+            <Text color={roleColor(m.role)}>{padEnd(m.role, roleW)}</Text>
+            <Text>  </Text>
+            <SnippetText
+              text={m.text}
+              regex={regex}
+              width={snippetW}
+            />
+          </Text>
+        ))}
+        {hidden > 0 ? (
+          <Text dimColor>
+            … {hidden} more match{hidden === 1 ? "" : "es"} in this session
+          </Text>
+        ) : null}
+      </Box>
+    </Box>
+  );
+}
+
+function HistoryPreview(props: {
+  row: HistoryRow;
+  regex: RegExp | null;
+  height: number;
+  width: number;
+}) {
+  const { row, regex, height, width } = props;
+  const entry = row.entry;
+  const projectDisp = projectLabel(entry.project);
+  const stamp = formatStampMinute(entry.timestamp);
+
+  const bodyLines = Math.max(1, height - 4);
+  const raw = stripBracketedSeconds(entry.text).split("\n");
+  const contentLines = centerOnMatch(raw, regex, bodyLines);
+  const extra = raw.length > bodyLines ? raw.length - contentLines.length : 0;
 
   return (
     <Box
@@ -535,33 +672,45 @@ function Preview(props: {
     >
       <Text>
         <Text color={sourceColor(entry.source)} bold>
-          {sourceLabel(entry.source)}
+          ●{" "}
         </Text>
-        <Text> · </Text>
-        <Text color="gray">{ts}</Text>
-        <Text> · </Text>
-        <Text color="cyan">{projectDisp}</Text>
-      </Text>
-      <Text>
-        <Text color="yellow">{sessionDisp}</Text>
-        <Text> · </Text>
-        <Text color={roleColor(entry.role)}>{entry.role}</Text>
-        {entry.kind === "session" && entry.gitBranch ? (
-          <Text dimColor> · {entry.gitBranch}</Text>
-        ) : null}
+        <Text color="cyan" bold>
+          {projectDisp}
+        </Text>
+        <Text dimColor>  ·  </Text>
+        <Text color="magenta">history</Text>
+        <Text dimColor>  ·  </Text>
+        <Text color="gray">{stamp}</Text>
       </Text>
       <Box flexDirection="column" marginTop={1}>
         {contentLines.map((line, i) => (
-          <Text key={`pv-${i}`}>
+          <Text key={`pv-${i}`} wrap="truncate-end">
             <HighlightedSpans
-              text={truncate(line.replace(/\t/g, "  "), width - 4)}
+              text={truncate(line.replace(/\t/g, "  "), Math.max(10, width - 6))}
               regex={regex}
             />
           </Text>
         ))}
-        {truncatedLines ? <Text dimColor>… ({rawLines.length} lines)</Text> : null}
+        {extra > 0 ? (
+          <Text dimColor>… {extra} more line{extra === 1 ? "" : "s"}</Text>
+        ) : null}
       </Box>
     </Box>
+  );
+}
+
+function SnippetText(props: {
+  text: string;
+  regex: RegExp | null;
+  width: number;
+}) {
+  const snippet = makeSnippet(props.text, props.regex, props.width);
+  return (
+    <>
+      <Text dimColor>{snippet.prefix}</Text>
+      <HighlightedSpans text={snippet.slice} regex={props.regex} />
+      <Text dimColor>{snippet.suffix}</Text>
+    </>
   );
 }
 
@@ -569,7 +718,8 @@ function Footer(props: { dangerously: boolean }) {
   return (
     <Box paddingX={1}>
       <Text dimColor>
-        ↑↓ nav · Enter resume · Tab role · Ctrl+B source · Ctrl+P cwd · Ctrl+D dangerously{props.dangerously ? "✓" : ""} · Esc quit
+        ↑↓ nav · Enter resume · Tab role · Ctrl+B source · Ctrl+P cwd · Ctrl+D dangerously
+        {props.dangerously ? " ✓" : ""} · Esc quit
       </Text>
     </Box>
   );
@@ -700,22 +850,75 @@ function centerOnMatch(
   return lines.slice(start, start + maxLines);
 }
 
-function formatCompactTimestamp(ts: Date | null): string {
-  if (!ts || Number.isNaN(ts.getTime())) return "                ";
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return (
-    `${ts.getFullYear()}-${pad(ts.getMonth() + 1)}-${pad(ts.getDate())} ` +
-    `${pad(ts.getHours())}:${pad(ts.getMinutes())}`
-  );
+const MONTHS_SHORT = [
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "may",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "oct",
+  "nov",
+  "dec",
+] as const;
+
+function formatRelativeTime(ts: Date | null): string {
+  if (!ts || Number.isNaN(ts.getTime())) return "—";
+  const diffMs = Date.now() - ts.getTime();
+  if (diffMs < 0) return formatShortDate(ts);
+  const s = Math.floor(diffMs / 1000);
+  if (s < 45) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return formatShortDate(ts);
 }
 
-function formatFullTimestamp(ts: Date | null): string {
-  if (!ts || Number.isNaN(ts.getTime())) return "(no timestamp)";
+function formatShortDate(ts: Date): string {
+  const month = MONTHS_SHORT[ts.getMonth()] ?? "???";
+  const day = ts.getDate();
+  const thisYear = new Date().getFullYear();
+  if (ts.getFullYear() === thisYear) return `${month} ${day}`;
+  return `${month} ${day} '${String(ts.getFullYear()).slice(-2)}`;
+}
+
+function formatShortTime(ts: Date | null): string {
+  if (!ts || Number.isNaN(ts.getTime())) return "—";
+  const rel = formatRelativeTime(ts);
+  if (rel !== "just now" && !rel.endsWith("ago")) return rel;
   const pad = (n: number) => n.toString().padStart(2, "0");
-  return (
-    `${ts.getFullYear()}-${pad(ts.getMonth() + 1)}-${pad(ts.getDate())} ` +
-    `${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}`
-  );
+  return `${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+}
+
+function formatStampMinute(ts: Date | null): string {
+  if (!ts || Number.isNaN(ts.getTime())) return "(no timestamp)";
+  const month = MONTHS_SHORT[ts.getMonth()] ?? "???";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${month} ${ts.getDate()} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+}
+
+function describeSpan(first: Date | null, last: Date | null): string {
+  if (!first && !last) return "";
+  if (!first || !last) return formatShortDate((first ?? last) as Date);
+  const sameMinute =
+    Math.abs(last.getTime() - first.getTime()) < 60_000 &&
+    first.getHours() === last.getHours() &&
+    first.getMinutes() === last.getMinutes();
+  if (sameMinute) return formatStampMinute(last);
+  return `${formatStampMinute(first)} → ${formatStampMinute(last)}`;
+}
+
+function projectLabel(p: string): string {
+  if (!p) return "(no-project)";
+  const short = shortenPath(p);
+  const parts = short.split("/");
+  return parts[parts.length - 1] || short;
 }
 
 function shortenPath(p: string): string {
@@ -727,6 +930,17 @@ function shortenPath(p: string): string {
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
   return s.slice(0, Math.max(1, max - 1)) + "…";
+}
+
+function padEnd(s: string, max: number): string {
+  if (s.length >= max) return s.slice(0, max);
+  return s + " ".repeat(max - s.length);
+}
+
+const BRACKETED_STAMP =
+  /\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}):\d{2}\]/g;
+function stripBracketedSeconds(text: string): string {
+  return text.replace(BRACKETED_STAMP, "[$1 $2]");
 }
 
 function roleColor(role: Role | null | undefined): string {
@@ -753,8 +967,4 @@ function sourceColor(source: Source | null | undefined): string {
     default:
       return "white";
   }
-}
-
-function sourceLabel(source: Source): string {
-  return source === "claude-code" ? "claude" : "codex";
 }

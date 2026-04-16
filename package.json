@@ -1,6 +1,6 @@
 {
   "name": "agent-grep",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Interactive grep across Claude Code and Codex CLI session history, with a TUI and print mode.",
   "type": "module",
   "bin": {

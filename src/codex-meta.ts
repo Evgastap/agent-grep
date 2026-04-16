@@ -3,12 +3,48 @@ import type { CodexContext } from "./parse.ts";
 
 const cache = new Map<string, CodexContext>();
 
+const sessionIdToPath = new Map<string, string>();
+const rootCache = new Map<string, CodexContext>();
+
 export async function getCodexContext(filePath: string): Promise<CodexContext> {
   const cached = cache.get(filePath);
   if (cached) return cached;
   const ctx = await loadCodexContext(filePath);
   cache.set(filePath, ctx);
   return ctx;
+}
+
+export function buildCodexSessionIndex(files: string[]): void {
+  sessionIdToPath.clear();
+  rootCache.clear();
+  for (const f of files) {
+    if (!f.endsWith(".jsonl")) continue;
+    const sid = extractSessionIdFromPath(f);
+    if (sid) sessionIdToPath.set(sid, f);
+  }
+}
+
+export async function resolveCodexRoot(
+  ctx: CodexContext,
+): Promise<CodexContext> {
+  const cached = rootCache.get(ctx.sessionId);
+  if (cached) return cached;
+
+  let current = ctx;
+  const visited = new Set<string>([ctx.sessionId]);
+  while (current.forkedFromId) {
+    const parentId = current.forkedFromId;
+    if (visited.has(parentId)) break;
+    const parentPath = sessionIdToPath.get(parentId);
+    if (!parentPath) break;
+    const parentCtx = await getCodexContext(parentPath);
+    if (!parentCtx.sessionId || parentCtx.sessionId === current.sessionId) break;
+    visited.add(parentId);
+    current = parentCtx;
+  }
+
+  rootCache.set(ctx.sessionId, current);
+  return current;
 }
 
 const MAX_FIRST_LINE_BYTES = 2 * 1024 * 1024;
@@ -35,6 +71,10 @@ async function loadCodexContext(filePath: string): Promise<CodexContext> {
           sessionId:
             typeof payload.id === "string" ? payload.id : fallback.sessionId,
           project: typeof payload.cwd === "string" ? payload.cwd : "",
+          forkedFromId:
+            typeof payload.forked_from_id === "string"
+              ? payload.forked_from_id
+              : undefined,
         };
       }
     }

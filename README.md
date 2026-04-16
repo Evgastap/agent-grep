@@ -2,6 +2,8 @@
 
 Interactive grep across your Claude Code and Codex CLI session history.
 
+Source: https://github.com/Evgastap/agent-grep
+
 ## Install
 
 ```sh
